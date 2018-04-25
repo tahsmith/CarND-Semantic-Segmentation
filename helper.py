@@ -1,5 +1,9 @@
 import re
 import random
+
+import math
+from math import pi
+
 import numpy as np
 import os.path
 import scipy.misc
@@ -10,6 +14,7 @@ import tensorflow as tf
 from glob import glob
 from urllib.request import urlretrieve
 from tqdm import tqdm
+import PIL.Image
 
 
 class DLProgress(tqdm):
@@ -59,6 +64,37 @@ def maybe_download_pretrained_vgg(data_dir):
         os.remove(os.path.join(vgg_path, vgg_filename))
 
 
+def transform_image(image, shift, rotation, scale, flip):
+    dtype_in = image.dtype  # Make sure we preserve dtype
+    image = PIL.Image.fromarray(image)
+    image = image.transform(
+        image.size, PIL.Image.AFFINE,
+        (scale, 0, shift[0], 0, scale, shift[1]))
+    image.rotate(rotation)
+    if flip:
+        image.transpose(PIL.Image.FLIP_LEFT_RIGHT)
+    return np.array(image, dtype=dtype_in)
+
+def random_transform(image, labelled_image):
+    rotation = random.uniform(-10, 10)
+    scale = 1.1 ** random.uniform(-1, 1)
+    shift_x = random.uniform(-10, 10)
+    shift_y = random.uniform(-10, 10)
+    flip = random.choice([True, False])
+
+    image, labelled_image = [
+        transform_image(
+            x,
+            (shift_x, shift_y),
+            rotation,
+            scale,
+            flip
+        ) for x in (image, labelled_image)
+    ]
+
+    return image, labelled_image
+
+
 def gen_batch_function(data_folder, image_shape):
     """
     Generate function to create batches of training data
@@ -94,13 +130,15 @@ def gen_batch_function(data_folder, image_shape):
                 gt_bg = gt_bg.reshape(*gt_bg.shape, 1)
                 labelled_image = np.concatenate((gt_bg, np.invert(gt_bg)),
                                                 axis=2)
+                labelled_image = np.array(labelled_image, dtype=np.uint8)
 
                 yield image, labelled_image
 
         def augment(sequence):
             for image, labelled_image in sequence:
                 yield image, labelled_image
-                yield image[::-1, :, :], labelled_image[::-1, :, :]
+                yield random_transform(image, labelled_image)
+
 
         random.shuffle(path_list)
         image_list = []

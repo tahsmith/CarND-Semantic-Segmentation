@@ -121,7 +121,6 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     """
     cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
         logits=nn_last_layer, labels=correct_label)
-    cross_entropy = tf.reshape(cross_entropy, [-1, num_classes])
     cost = tf.reduce_mean(cross_entropy)
     regularisation_cost_list = tf.get_collection(
         tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -203,7 +202,7 @@ def run():
             os.path.join(data_dir, 'data_road/training'), image_shape)
 
         # OPTIONAL: Augment Images for better results
-        #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
+        # See helper.gen_batch_function
 
         # Build NN using load_vgg, layers, and optimize function
         input_image, keep_prob, *vgg_layers = load_vgg(sess, vgg_path)
