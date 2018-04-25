@@ -73,6 +73,10 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
             padding='same'
         )
 
+    def fcn_skip(previous, skip_from):
+        adapted = fcn_adapt(skip_from)
+        return tf.add(previous, adapted)
+
     def fcn_upscale(input_, kernel_size, strides):
         return tf.layers.conv2d_transpose(
             input_,
@@ -86,18 +90,18 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 
     with tf.variable_scope('fcn8'):
         decoder_input = fcn_adapt(vgg_layer7_out)
-        skip_1 = fcn_adapt(vgg_layer4_out)
-        skip_2 = fcn_adapt(vgg_layer3_out)
 
         upscale_1 = fcn_upscale(decoder_input, 4, strides=(2, 2))
-        decoder_layer_1 = tf.add(upscale_1, skip_1)
+        decoder_layer_1 = fcn_skip(upscale_1, vgg_layer4_out)
 
         upscale_2 = fcn_upscale(decoder_layer_1, 4, strides=(2, 2))
-        decoder_layer_2 = tf.add(upscale_2, skip_2)
+        decoder_layer_2 = fcn_skip(upscale_2, vgg_layer3_out)
 
-        upscale_3 = fcn_upscale(decoder_layer_2, 16, strides=(8, 8))
+        upscale_3 = fcn_upscale(decoder_layer_2, 4, strides=(2, 2))
+        upscale_4 = fcn_upscale(upscale_3, 4, strides=(2, 2))
+        upscale_5 = fcn_upscale(upscale_4, 4, strides=(2, 2))
 
-    return upscale_3
+    return upscale_5
 
 
 tests.test_layers(layers)
@@ -175,7 +179,7 @@ tests.test_train_nn(train_nn)
 def run():
     num_classes = 2
     image_shape = (160, 576)
-    epochs = 100
+    epochs = 50
     batch_size = 50
     data_dir = './data'
     runs_dir = './runs'
@@ -198,7 +202,7 @@ def run():
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
-        # TODO: Build NN using load_vgg, layers, and optimize function
+        # Build NN using load_vgg, layers, and optimize function
         input_image, keep_prob, *vgg_layers = load_vgg(sess, vgg_path)
 
         fcn8_output = layers(*vgg_layers, num_classes)
@@ -209,12 +213,11 @@ def run():
         logits, train_op, cost = optimize(fcn8_output, labels, learning_rate,
                                           num_classes)
 
-        # TODO: Train NN using the train_nn function
-
+        # Train NN using the train_nn function
         train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cost,
                  input_image, labels, keep_prob, learning_rate)
 
-        # TODO: Save inference data using helper.save_inference_samples
+        # Save inference data using helper.save_inference_samples
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape,
                                       logits, keep_prob, input_image)
 
