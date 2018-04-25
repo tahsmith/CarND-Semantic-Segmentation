@@ -36,10 +36,6 @@ def load_vgg(sess, vgg_path):
     vgg_layer4_out_tensor_name = 'layer4_out:0'
     vgg_layer7_out_tensor_name = 'layer7_out:0'
 
-    tf.stop_gradient(vgg_layer3_out_tensor_name)
-    tf.stop_gradient(vgg_layer4_out_tensor_name)
-    tf.stop_gradient(vgg_layer7_out_tensor_name)
-
     tf.saved_model.loader.load(sess, [vgg_tag], vgg_path)
     return (
         sess.graph.get_tensor_by_name(vgg_input_tensor_name),
@@ -63,25 +59,26 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
 
-    decoder_input = tf.layers.conv2d(vgg_layer7_out, num_classes, 1,
-                                      strides=(1, 1))
+    with tf.variable_scope('fcn8'):
+        decoder_input = tf.layers.conv2d(vgg_layer7_out, num_classes, 1,
+                                          strides=(1, 1))
 
-    skip_1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1,
-                                      strides=(1, 1))
+        skip_1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1,
+                                          strides=(1, 1))
 
-    skip_2 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1,
-                                      strides=(1, 1))
+        skip_2 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1,
+                                          strides=(1, 1))
 
-    upscale_1 = tf.layers.conv2d_transpose(decoder_input, num_classes, 4,
-                                        strides=(2, 2), padding='same')
-    decoder_layer_1 = tf.add(upscale_1, skip_1)
+        upscale_1 = tf.layers.conv2d_transpose(decoder_input, num_classes, 4,
+                                            strides=(2, 2), padding='same')
+        decoder_layer_1 = tf.add(upscale_1, skip_1)
 
-    upscale_2 = tf.layers.conv2d_transpose(decoder_layer_1, num_classes, 4,
-                                        strides=(2, 2), padding='same')
-    decoder_layer_2 = tf.add(upscale_2, skip_2)
+        upscale_2 = tf.layers.conv2d_transpose(decoder_layer_1, num_classes, 4,
+                                            strides=(2, 2), padding='same')
+        decoder_layer_2 = tf.add(upscale_2, skip_2)
 
-    output = tf.layers.conv2d_transpose(decoder_layer_2, num_classes, 4,
-                                        strides=(8, 8), padding='same')
+        output = tf.layers.conv2d_transpose(decoder_layer_2, num_classes, 16,
+                                            strides=(8, 8), padding='same')
 
     return output
 
@@ -103,7 +100,12 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     cross_entropy = tf.reshape(cross_entropy, [-1, num_classes])
     cost = tf.reduce_mean(cross_entropy)
     optimiser = tf.train.AdamOptimizer(learning_rate)
-    train = optimiser.minimize(cost)
+    fc8_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fcn8')
+    kwargs = {}
+    if fc8_vars:
+        kwargs.update(var_list=fc8_vars)
+
+    train = optimiser.minimize(cost, **kwargs)
 
     return tf.reshape(nn_last_layer, [-1, num_classes]), train, cost
 
@@ -151,8 +153,8 @@ tests.test_train_nn(train_nn)
 def run():
     num_classes = 2
     image_shape = (160, 576)
-    epochs = 20
-    batch_size = 10
+    epochs = 40
+    batch_size = 50
     data_dir = './data'
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
