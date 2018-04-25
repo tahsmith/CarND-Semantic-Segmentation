@@ -59,13 +59,25 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
 
-    output = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, strides=(1, 1))
-    output = tf.layers.conv2d_transpose(output, num_classes, 4,
+    decoder_input = tf.layers.conv2d(vgg_layer7_out, num_classes, 1,
+                                      strides=(1, 1))
+
+    skip_1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1,
+                                      strides=(1, 1))
+
+    skip_2 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1,
+                                      strides=(1, 1))
+
+    upscale_1 = tf.layers.conv2d_transpose(decoder_input, num_classes, 4,
                                         strides=(2, 2), padding='same')
-    output = tf.layers.conv2d_transpose(output, num_classes, 4,
-                                        strides=(4, 4), padding='same')
-    output = tf.layers.conv2d_transpose(output, num_classes, 4,
-                                        strides=(4, 4), padding='same')
+    decoder_layer_1 = tf.add(upscale_1, skip_1)
+
+    upscale_2 = tf.layers.conv2d_transpose(decoder_layer_1, num_classes, 4,
+                                        strides=(2, 2), padding='same')
+    decoder_layer_2 = tf.add(upscale_2, skip_2)
+
+    output = tf.layers.conv2d_transpose(decoder_layer_2, num_classes, 4,
+                                        strides=(8, 8), padding='same')
 
     return output
 
@@ -134,7 +146,7 @@ tests.test_train_nn(train_nn)
 def run():
     num_classes = 2
     image_shape = (160, 576)
-    epochs = 1
+    epochs = 20
     batch_size = 20
     data_dir = './data'
     runs_dir = './runs'
