@@ -36,6 +36,10 @@ def load_vgg(sess, vgg_path):
     vgg_layer4_out_tensor_name = 'layer4_out:0'
     vgg_layer7_out_tensor_name = 'layer7_out:0'
 
+    tf.stop_gradient(vgg_layer3_out_tensor_name)
+    tf.stop_gradient(vgg_layer4_out_tensor_name)
+    tf.stop_gradient(vgg_layer7_out_tensor_name)
+
     tf.saved_model.loader.load(sess, [vgg_tag], vgg_path)
     return (
         sess.graph.get_tensor_by_name(vgg_input_tensor_name),
