@@ -1,5 +1,7 @@
 import os.path
 import tensorflow as tf
+from tensorflow.contrib.layers import l2_regularizer
+
 import helper
 import warnings
 from distutils.version import LooseVersion
@@ -59,28 +61,43 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
 
+    def fcn_adapt(input_):
+        """
+        # 1x1 convs to adapt the classes from the original vgg size to
+        # num_classes.
+        """
+        return tf.layers.conv2d(
+            input_, num_classes, 1,
+            strides=(1, 1),
+            kernel_initializer=tf.initializers.variance_scaling(),
+            padding='same'
+        )
+
+    def fcn_upscale(input_, kernel_size, strides):
+        return tf.layers.conv2d_transpose(
+            input_,
+            num_classes,
+            kernel_size,
+            strides=strides,
+            padding='same',
+            kernel_initializer=tf.initializers.variance_scaling(),
+            kernel_regularizer=l2_regularizer(1e-3)
+        )
+
     with tf.variable_scope('fcn8'):
-        decoder_input = tf.layers.conv2d(vgg_layer7_out, num_classes, 1,
-                                          strides=(1, 1))
+        decoder_input = fcn_adapt(vgg_layer7_out)
+        skip_1 = fcn_adapt(vgg_layer4_out)
+        skip_2 = fcn_adapt(vgg_layer3_out)
 
-        skip_1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1,
-                                          strides=(1, 1))
-
-        skip_2 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1,
-                                          strides=(1, 1))
-
-        upscale_1 = tf.layers.conv2d_transpose(decoder_input, num_classes, 4,
-                                            strides=(2, 2), padding='same')
+        upscale_1 = fcn_upscale(decoder_input, 4, strides=(2, 2))
         decoder_layer_1 = tf.add(upscale_1, skip_1)
 
-        upscale_2 = tf.layers.conv2d_transpose(decoder_layer_1, num_classes, 4,
-                                            strides=(2, 2), padding='same')
+        upscale_2 = fcn_upscale(decoder_layer_1, 4, strides=(2, 2))
         decoder_layer_2 = tf.add(upscale_2, skip_2)
 
-        output = tf.layers.conv2d_transpose(decoder_layer_2, num_classes, 16,
-                                            strides=(8, 8), padding='same')
+        upscale_3 = fcn_upscale(decoder_layer_2, 16, strides=(8, 8))
 
-    return output
+    return upscale_3
 
 
 tests.test_layers(layers)
@@ -99,6 +116,10 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
         logits=nn_last_layer, labels=correct_label)
     cross_entropy = tf.reshape(cross_entropy, [-1, num_classes])
     cost = tf.reduce_mean(cross_entropy)
+    regularisation_cost_list = tf.get_collection(
+        tf.GraphKeys.REGULARIZATION_LOSSES)
+    for regularisation_cost in regularisation_cost_list:
+        cost += regularisation_cost
     optimiser = tf.train.AdamOptimizer(learning_rate)
     fc8_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fcn8')
     kwargs = {}
@@ -133,7 +154,7 @@ def train_nn(sess: tf.Session, epochs, batch_size, get_batches_fn, train_op,
     sess.run(tf.initialize_all_variables())
 
     for epoch_i in range(epochs):
-        print('Epoch {i} / {count}'.format(i=epoch_i+1, count=epochs))
+        print('Epoch {i} / {count}'.format(i=epoch_i + 1, count=epochs))
         for image_batch, label_batch in get_batches_fn(batch_size):
             _, cross_entropy_loss_value = sess.run(
                 [train_op, cross_entropy_loss],
@@ -147,13 +168,14 @@ def train_nn(sess: tf.Session, epochs, batch_size, get_batches_fn, train_op,
 
             print(cross_entropy_loss_value)
 
+
 tests.test_train_nn(train_nn)
 
 
 def run():
     num_classes = 2
     image_shape = (160, 576)
-    epochs = 40
+    epochs = 100
     batch_size = 50
     data_dir = './data'
     runs_dir = './runs'
