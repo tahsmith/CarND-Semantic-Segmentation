@@ -61,7 +61,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
 
-    def fcn_adapt(input_):
+    def adapt(input_):
         """
         # 1x1 convs to adapt the classes from the original vgg size to
         # num_classes.
@@ -70,38 +70,41 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
             input_, num_classes, 1,
             strides=(1, 1),
             kernel_initializer=tf.initializers.variance_scaling(),
+            kernel_regularizer=l2_regularizer(1e-3),
             padding='same'
         )
 
-    def fcn_skip(previous, skip_from):
-        adapted = fcn_adapt(skip_from)
+    def skip(previous, skip_from):
+        adapted = adapt(skip_from)
         return tf.add(previous, adapted)
 
-    def fcn_upscale(input_, kernel_size, strides):
+    def upscale(input_, kernel_size, strides):
         return tf.layers.conv2d_transpose(
             input_,
             num_classes,
             kernel_size,
             strides=strides,
             padding='same',
-            kernel_initializer=tf.initializers.variance_scaling(),
+            kernel_initializer=tf.initializers.variance_scaling(mode='fan_out'),
             kernel_regularizer=l2_regularizer(1e-3)
         )
 
     with tf.variable_scope('fcn8'):
-        decoder_input = fcn_adapt(vgg_layer7_out)
+        decoder_input = adapt(vgg_layer7_out)
 
-        upscale_1 = fcn_upscale(decoder_input, 4, strides=(2, 2))
-        decoder_layer_1 = fcn_skip(upscale_1, vgg_layer4_out)
+        upscale_1 = upscale(decoder_input, 4, strides=(2, 2))
+        decoder_layer_1 = skip(upscale_1, vgg_layer4_out)
 
-        upscale_2 = fcn_upscale(decoder_layer_1, 4, strides=(2, 2))
-        decoder_layer_2 = fcn_skip(upscale_2, vgg_layer3_out)
+        upscale_2 = upscale(decoder_layer_1, 4, strides=(2, 2))
+        decoder_layer_2 = skip(upscale_2, vgg_layer3_out)
 
-        upscale_3 = fcn_upscale(decoder_layer_2, 4, strides=(2, 2))
-        upscale_4 = fcn_upscale(upscale_3, 4, strides=(2, 2))
-        upscale_5 = fcn_upscale(upscale_4, 4, strides=(2, 2))
+        upscale_3 = upscale(decoder_layer_2, 4, strides=(2, 2))
+        upscale_4 = upscale(upscale_3, 4, strides=(2, 2))
+        upscale_5 = upscale(upscale_4, 4, strides=(2, 2))
 
-    return upscale_5
+        output = upscale_5
+
+    return output
 
 
 tests.test_layers(layers)
@@ -179,7 +182,7 @@ tests.test_train_nn(train_nn)
 def run():
     num_classes = 2
     image_shape = (160, 576)
-    epochs = 50
+    epochs = 100
     batch_size = 50
     data_dir = './data'
     runs_dir = './runs'
