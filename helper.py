@@ -82,10 +82,11 @@ def transform_image(image, shift, rotation, scale, flip):
 
 
 def random_transform(image, labelled_image):
+    width, height = image.shape[1], image.shape[0]
     rotation = random.uniform(-45, 45)
     scale = 1.6 ** random.uniform(-1, 1)
-    shift_x = random.uniform(-10, 10)
-    shift_y = random.uniform(-10, 10)
+    shift_x = random.uniform(-0.25 * width, 0.25 * width)
+    shift_y = random.uniform(-0.25 * height, 0.25 * height)
     flip = random.choice([True, False])
 
     image, mask = [
@@ -95,11 +96,11 @@ def random_transform(image, labelled_image):
             rotation,
             scale,
             flip
-        ) for x in (image, labelled_image[:, :, 0])
+        ) for x in (image, labelled_image[:, :, 1].copy())
     ]
 
-    labelled_image[:, :, 0] = mask >= 0.5
-    labelled_image[:, :, 1] = mask < 0.5
+    labelled_image[:, :, 1] = mask >= 0.5
+    labelled_image[:, :, 0] = mask < 0.5
 
     # labelled_image = labelled_image.filter(PIL.ImageFilter.BoxBlur(3))
     return image, labelled_image
@@ -144,11 +145,11 @@ def gen_batch_function(data_folder, image_shape):
 
                 yield image, labelled_image
 
-        def augment(sequence, augmentation=2):
+        def augment(sequence, augmentation=1):
             for image, labelled_image in sequence:
                 yield image, labelled_image
                 for i in range(augmentation):
-                    yield random_transform(image, labelled_image)
+                    yield random_transform(image.copy(), labelled_image.copy())
 
 
         random.shuffle(path_list)

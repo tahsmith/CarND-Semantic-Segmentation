@@ -129,6 +129,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     optimiser = tf.train.AdamOptimizer(learning_rate)
     fc8_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fcn8')
     kwargs = {}
+    # Only train our vars
     if fc8_vars:
         kwargs.update(var_list=fc8_vars)
 
@@ -181,8 +182,8 @@ tests.test_train_nn(train_nn)
 def run():
     num_classes = 2
     image_shape = (160, 576)
-    epochs = 100
-    batch_size = 50
+    epochs = 50
+    batch_size = 20
     data_dir = './data'
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
