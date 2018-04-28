@@ -15,6 +15,7 @@ from glob import glob
 from urllib.request import urlretrieve
 from tqdm import tqdm
 import PIL.Image
+import PIL.ImageFilter
 
 
 class DLProgress(tqdm):
@@ -67,31 +68,40 @@ def maybe_download_pretrained_vgg(data_dir):
 def transform_image(image, shift, rotation, scale, flip):
     dtype_in = image.dtype  # Make sure we preserve dtype
     image = PIL.Image.fromarray(image)
-    image = image.transform(
-        image.size, PIL.Image.AFFINE,
-        (scale, 0, shift[0], 0, scale, shift[1]))
-    image.rotate(rotation)
+    image = image.rotate(
+        rotation,
+        resample=PIL.Image.BICUBIC,
+        translate=(shift[0], shift[1])
+    )
+    # image = image.transform(
+    #     image.size, PIL.Image.AFFINE,
+    #     (scale, 0, 0, 0, scale, 0))
     if flip:
-        image.transpose(PIL.Image.FLIP_LEFT_RIGHT)
+        image = image.transpose(PIL.Image.FLIP_LEFT_RIGHT)
     return np.array(image, dtype=dtype_in)
 
+
 def random_transform(image, labelled_image):
-    rotation = random.uniform(-10, 10)
-    scale = 1.1 ** random.uniform(-1, 1)
+    rotation = random.uniform(-45, 45)
+    scale = 1.6 ** random.uniform(-1, 1)
     shift_x = random.uniform(-10, 10)
     shift_y = random.uniform(-10, 10)
     flip = random.choice([True, False])
 
-    image, labelled_image = [
+    image, mask = [
         transform_image(
             x,
             (shift_x, shift_y),
             rotation,
             scale,
             flip
-        ) for x in (image, labelled_image)
+        ) for x in (image, labelled_image[:, :, 0])
     ]
 
+    labelled_image[:, :, 0] = mask >= 0.5
+    labelled_image[:, :, 1] = mask < 0.5
+
+    # labelled_image = labelled_image.filter(PIL.ImageFilter.BoxBlur(3))
     return image, labelled_image
 
 
@@ -134,10 +144,11 @@ def gen_batch_function(data_folder, image_shape):
 
                 yield image, labelled_image
 
-        def augment(sequence):
+        def augment(sequence, augmentation=2):
             for image, labelled_image in sequence:
                 yield image, labelled_image
-                yield random_transform(image, labelled_image)
+                for i in range(augmentation):
+                    yield random_transform(image, labelled_image)
 
 
         random.shuffle(path_list)
