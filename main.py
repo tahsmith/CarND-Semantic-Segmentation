@@ -130,8 +130,8 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     fc8_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fcn8')
     kwargs = {}
     # Only train our vars
-    if fc8_vars:
-        kwargs.update(var_list=fc8_vars)
+    # if fc8_vars:
+    #     kwargs.update(var_list=fc8_vars)
 
     train = optimiser.minimize(cost, **kwargs)
 
